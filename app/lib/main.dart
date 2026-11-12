@@ -60,6 +60,7 @@ class BookingApp extends StatelessWidget {
           builder: (context, _) => MaterialApp(
             title: 'Booking Manager',
             debugShowCheckedModeBanner: false,
+            scrollBehavior: const _AppScrollBehavior(),
             theme: buildTheme(Brightness.light),
             darkTheme: buildTheme(Brightness.dark),
             themeMode: switch (repo.themeMode) {
@@ -76,4 +77,13 @@ class BookingApp extends StatelessWidget {
       ),
     );
   }
+}
+
+/// In the browser preview, skip Android's stretch overscroll effect: it needs a
+/// shader file that the preview host can't serve. Installed apps keep it.
+class _AppScrollBehavior extends MaterialScrollBehavior {
+  const _AppScrollBehavior();
+  @override
+  Widget buildOverscrollIndicator(BuildContext context, Widget child, ScrollableDetails details) =>
+      kIsWeb ? child : super.buildOverscrollIndicator(context, child, details);
 }
