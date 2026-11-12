@@ -32,31 +32,30 @@ and ends with a **Web App URL** and an **API key** to paste into the apps.
 
 ## 2. Download the apps
 
-Every push to GitHub builds both apps.
+Every successful build is published on the **Releases** page with the same
+file names, so these links always download the newest version:
 
-- **Latest release**: open the repository's **Releases** page (on the right of
-  the GitHub page) and download the files under *Assets*. A release is made
-  whenever a version tag such as `v1.0.0` is pushed.
-- **Any build**: open the **Actions** tab, click the latest green
-  **Build apps** run and scroll to **Artifacts**:
-  - `windows` contains `BookingManager-Setup-x.y.z.exe` (installer) and
-    `BookingManager-x.y.z-windows.zip` (portable)
-  - `android-apk` contains `BookingManager-x.y.z.apk`
+- **Android:** https://github.com/ayushgupta2056/Prodigy_WD_TASKS/releases/latest/download/BookingManager.apk
+  (open this link on your phone)
+- **Windows installer:** https://github.com/ayushgupta2056/Prodigy_WD_TASKS/releases/latest/download/BookingManager-Setup.exe
+- **Windows portable (no install):** https://github.com/ayushgupta2056/Prodigy_WD_TASKS/releases/latest/download/BookingManager-Windows-portable.zip
 
-  (Artifacts download as a .zip; unzip it first.)
+No GitHub sign-in is needed. If your PC calls the `.apk` a "BlueStacks APK",
+that's only because BlueStacks is installed on the PC: it's a normal Android
+file. Copy it to the phone, or simply open the Android link on the phone.
 
 ## 3. Install on Windows
 
 **Installer (recommended)**
 
-1. Double-click `BookingManager-Setup-x.y.z.exe`.
+1. Double-click `BookingManager-Setup.exe`.
 2. Windows may show **"Windows protected your PC"**, because the installer
    isn't code-signed. Click **More info → Run anyway**.
 3. Click through the installer. It installs just for you and needs no admin
    rights. Tick *Create a desktop shortcut* if you want one.
 4. Open **Booking Manager** from the Start menu.
 
-**Portable (no install)**: unzip `BookingManager-x.y.z-windows.zip` anywhere
+**Portable (no install)**: unzip `BookingManager-Windows-portable.zip` anywhere
 (e.g. `Documents\Booking Manager`) and double-click `BookingManager.exe`. Keep
 all the files together.
 
@@ -64,8 +63,8 @@ To update, run the newer installer. Your connection and cached data are kept.
 
 ## 4. Install on Android (sideload the .apk)
 
-1. Copy `BookingManager-x.y.z.apk` to your phone (WhatsApp it to yourself,
-   Google Drive, USB cable, or download it on the phone directly from GitHub).
+1. On the phone, open the Android link above (or copy `BookingManager.apk`
+   over by WhatsApp, Google Drive or a USB cable).
 2. Tap the file. Android asks to allow installs from that app (Files, Chrome,
    Drive…). Tap **Settings → Allow from this source**, then go back.
 3. Tap **Install**. If Play Protect warns about an unknown app, tap

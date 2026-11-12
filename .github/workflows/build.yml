@@ -129,8 +129,13 @@ jobs:
           if-no-files-found: error
 
   release:
+    # Publishes every successful build of a branch (and any v* tag) as a
+    # GitHub Release with fixed file names, so these links always fetch the
+    # newest version:
+    #   https://github.com/<owner>/<repo>/releases/latest/download/BookingManager.apk
+    #   https://github.com/<owner>/<repo>/releases/latest/download/BookingManager-Setup.exe
     name: GitHub Release
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name != 'pull_request'
     needs: [android, windows]
     runs-on: ubuntu-latest
     permissions:
@@ -140,10 +145,21 @@ jobs:
         with:
           path: dist
           merge-multiple: true
+      - name: Give the files fixed names
+        run: |
+          mkdir out
+          cp dist/BookingManager-*.apk out/BookingManager.apk
+          cp dist/BookingManager-*-windows.zip out/BookingManager-Windows-portable.zip
+          cp dist/build/installer/BookingManager-Setup-*.exe out/BookingManager-Setup.exe
+          ls -la out
       - uses: softprops/action-gh-release@v2
         with:
-          files: |
-            dist/**/*.apk
-            dist/**/*.zip
-            dist/**/*.exe
-          generate_release_notes: true
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('build-{0}', github.run_number) }}
+          name: ${{ startsWith(github.ref, 'refs/tags/v') && format('Booking Manager {0}', github.ref_name) || format('Booking Manager (build {0})', github.run_number) }}
+          target_commitish: ${{ github.sha }}
+          make_latest: true
+          body: |
+            **Android:** download `BookingManager.apk` on your phone and tap it to install.
+            **Windows:** download `BookingManager-Setup.exe` and run it (More info → Run anyway if Windows warns).
+            Built from `${{ github.ref_name }}` at ${{ github.sha }}.
+          files: out/*
