@@ -99,6 +99,15 @@ nuisance). To fix it once:
 
 From the next build on, every APK is signed with your key.
 
+## Keeping phone and laptop in sync
+
+Connect both apps to the same Sheet (same Web App URL and API key). Each app
+syncs when it opens, when you come back to it, every 2 minutes while it is
+open, straight after every edit, and when you pull to refresh or click ↻.
+Edits made offline are kept on the device and sent when it is back online.
+If the same booking is edited on two devices before either syncs, the last
+save wins.
+
 ## 5. Try it without setting anything up
 
 On the first screen, tap **Explore with demo data**: a year of made-up

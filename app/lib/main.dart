@@ -9,6 +9,7 @@ import 'data/repository.dart';
 import 'services/notifications.dart';
 import 'theme/app_theme.dart';
 import 'ui/app_scope.dart';
+import 'ui/auto_sync.dart';
 import 'ui/shell.dart';
 import 'ui/screens/welcome_screen.dart';
 
@@ -52,17 +53,24 @@ class BookingApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppScope(
       repo: repo,
-      child: ListenableBuilder(
-        listenable: repo,
-        builder: (context, _) => MaterialApp(
-          title: 'Booking Manager',
-          debugShowCheckedModeBanner: false,
-          theme: buildTheme(Brightness.light),
-          darkTheme: buildTheme(Brightness.dark),
-          themeMode: switch (repo.themeMode) { 'light' => ThemeMode.light, 'dark' => ThemeMode.dark, _ => ThemeMode.system },
-          home: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 450),
-            child: repo.mode == Mode.unconfigured ? const WelcomeScreen(key: ValueKey('welcome')) : const Shell(key: ValueKey('shell')),
+      child: AutoSync(
+        repo: repo,
+        child: ListenableBuilder(
+          listenable: repo,
+          builder: (context, _) => MaterialApp(
+            title: 'Booking Manager',
+            debugShowCheckedModeBanner: false,
+            theme: buildTheme(Brightness.light),
+            darkTheme: buildTheme(Brightness.dark),
+            themeMode: switch (repo.themeMode) {
+              'light' => ThemeMode.light,
+              'dark' => ThemeMode.dark,
+              _ => ThemeMode.system,
+            },
+            home: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 450),
+              child: repo.mode == Mode.unconfigured ? const WelcomeScreen(key: ValueKey('welcome')) : const Shell(key: ValueKey('shell')),
+            ),
           ),
         ),
       ),
