@@ -1,5 +1,6 @@
 import 'dart:ui' show FontFeature;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -192,7 +193,7 @@ ThemeData buildTheme(Brightness brightness) {
     canvasColor: c.background,
     textTheme: text,
     extensions: [c],
-    splashFactory: InkSparkle.splashFactory,
+    splashFactory: kIsWeb ? InkRipple.splashFactory : InkSparkle.splashFactory,
     dividerTheme: DividerThemeData(color: c.hairline, thickness: 1, space: 1),
     appBarTheme: AppBarTheme(
       backgroundColor: c.background,
