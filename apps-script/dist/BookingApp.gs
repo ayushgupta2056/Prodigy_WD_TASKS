@@ -13,7 +13,11 @@
  * the first time you run setup().
  */
 var APP = {
-  VERSION: '0.1.0',
+  VERSION: '0.2.0',
+
+  /** Bump whenever a parser changes: emails that failed to parse with an older
+   *  version are automatically tried again on the next run. */
+  PARSER_VERSION: 1,
 
   SHEETS: {
     BOOKINGS: 'Bookings',
@@ -47,7 +51,7 @@ var APP = {
     ParserLog: [
       'email_message_id', 'thread_id', 'platform', 'result', 'type',
       'platform_booking_id', 'booking_id', 'error',
-      'subject', 'from', 'received_at', 'timestamp', 'resolved'
+      'subject', 'from', 'received_at', 'timestamp', 'resolved', 'parser_version'
     ]
   },
 
@@ -623,7 +627,7 @@ function shallowCopy_(o) {
  * so it can be tested without Google:
  *
  *   store:  getSettings(), listBookings(), insertBooking(b), updateBooking(b),
- *           processedMessageIds() -> object set, appendLog(entry)
+ *           listLogs(), appendLog(entry), updateLog(entry)
  *   source: search(query) -> [email], label(email, labelName)
  *           where email = { id, threadId, from, subject, date, plain(), html() }
  *
@@ -632,6 +636,9 @@ function shallowCopy_(o) {
  * search does NOT skip labelled threads; each message is processed once,
  * tracked by its Gmail message id in ParserLog. A booking is matched by
  * platform + platform booking id.
+ *
+ * Retry: an email that failed to parse is tried again (once) whenever
+ * APP.PARSER_VERSION is bumped, i.e. after a parser is improved.
  */
 
 /** Entry point for the 5-minute trigger. */
@@ -678,9 +685,10 @@ function runProcessor(store, source, ctx) {
 
   if (filters.length) {
     var windowDays = ctx.windowDays || parseInt(settings.search_window_days, 10) || 30;
-    var seen = store.processedMessageIds();
+    var logIndex = {};
+    store.listLogs().forEach(function (l) { if (l.email_message_id) logIndex[l.email_message_id] = l; });
     var emails = source.search(buildGmailQuery(filters, windowDays))
-      .filter(function (e) { return !seen[e.id]; })
+      .filter(function (e) { return !isDone_(logIndex[e.id]); })
       .sort(function (a, b) { return a.date - b.date; }); // booking before its cancellation
 
     var bookings = store.listBookings();
@@ -697,7 +705,12 @@ function runProcessor(store, source, ctx) {
         email_message_id: email.id, thread_id: email.threadId, platform: platform,
         result: '', type: '', platform_booking_id: '', booking_id: '', error: '',
         subject: email.subject || '', from: email.from || '',
-        received_at: email.date ? email.date.toISOString() : '', timestamp: ctx.nowIso, resolved: ''
+        received_at: email.date ? email.date.toISOString() : '', timestamp: ctx.nowIso, resolved: '',
+        parser_version: APP.PARSER_VERSION
+      };
+      var previous = logIndex[email.id];
+      var writeLog = function (entry) {
+        if (previous) { entry._row = previous._row; store.updateLog(entry); } else store.appendLog(entry);
       };
 
       var parsed;
@@ -709,7 +722,7 @@ function runProcessor(store, source, ctx) {
       } catch (err) {
         log.result = 'failed';
         log.error = String(err && err.message || err);
-        store.appendLog(log);
+        writeLog(log);
         source.label(email, APP.LABEL_UNPARSED);
         summary.failed++;
         continue;
@@ -748,7 +761,7 @@ function runProcessor(store, source, ctx) {
           summary.unchanged++;
         }
       }
-      store.appendLog(log);
+      writeLog(log);
       source.label(email, APP.LABEL_PROCESSED);
       summary.processed++;
     }
@@ -758,6 +771,12 @@ function runProcessor(store, source, ctx) {
   toComplete.forEach(function (b) { store.updateBooking(b); });
   summary.completed = toComplete.length;
   return summary;
+}
+
+function isDone_(log) {
+  if (!log) return false;
+  if (log.result === 'ok' || log.resolved) return true;
+  return String(log.parser_version) === String(APP.PARSER_VERSION);
 }
 
 /** Gmail implementation of the `source` interface. */
@@ -875,15 +894,23 @@ SheetStore.prototype.listBookings = function () { return this.table(APP.SHEETS.B
 SheetStore.prototype.insertBooking = function (b) { return this.table(APP.SHEETS.BOOKINGS).append(b); };
 SheetStore.prototype.updateBooking = function (b) { return this.table(APP.SHEETS.BOOKINGS).update(b); };
 
-SheetStore.prototype.processedMessageIds = function () {
-  var set = {};
-  this.table(APP.SHEETS.PARSER_LOG).readAll().forEach(function (r) {
-    if (r.email_message_id) set[r.email_message_id] = true;
-  });
-  return set;
-};
-
+SheetStore.prototype.listLogs = function () { return this.table(APP.SHEETS.PARSER_LOG).readAll(); };
 SheetStore.prototype.appendLog = function (entry) { return this.table(APP.SHEETS.PARSER_LOG).append(entry); };
+SheetStore.prototype.updateLog = function (entry) { return this.table(APP.SHEETS.PARSER_LOG).update(entry); };
+
+SheetStore.prototype.listBlocks = function () { return this.table(APP.SHEETS.BLOCKS).readAll(); };
+SheetStore.prototype.insertBlock = function (b) { return this.table(APP.SHEETS.BLOCKS).append(b); };
+SheetStore.prototype.updateBlock = function (b) { return this.table(APP.SHEETS.BLOCKS).update(b); };
+
+/** Delete rows by sheet row number (highest first so numbers stay valid). */
+SheetStore.prototype.deleteBookingRow = function (row) { this.table(APP.SHEETS.BOOKINGS).sheet.deleteRow(row); };
+SheetStore.prototype.deleteBlockRow = function (row) { this.table(APP.SHEETS.BLOCKS).sheet.deleteRow(row); };
+
+SheetStore.prototype.setSetting = function (key, value) {
+  var t = this.table(APP.SHEETS.SETTINGS);
+  var row = t.readAll().filter(function (r) { return r.key === key; })[0];
+  if (row) { row.value = value; t.update(row); } else t.append({ key: key, value: value, notes: '' });
+};
 
 // ===== 60_Setup.gs =====
 /**
@@ -895,6 +922,9 @@ function onOpen() {
     .addItem('1. Run setup', 'setup')
     .addItem('Process new emails now', 'processNewEmailsFromMenu')
     .addItem('Import last 12 months of emails', 'backfillLastYear')
+    .addSeparator()
+    .addItem('Show Web App URL and API key', 'showConnectionDetails')
+    .addItem('Make a new API key', 'rotateApiKey')
     .addSeparator()
     .addItem('Turn automatic checking on (every 5 min)', 'installTrigger')
     .addItem('Turn automatic checking off', 'removeTrigger')
@@ -920,6 +950,7 @@ function setup() {
     if (!GmailApp.getUserLabelByName(name)) GmailApp.createLabel(name);
   });
 
+  getApiKey_();
   installTrigger();
   ss.toast('Setup complete. Gmail is now checked every 5 minutes.', 'Booking App', 10);
 }
@@ -972,4 +1003,337 @@ function removeTrigger() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === APP.TRIGGER_FUNCTION) ScriptApp.deleteTrigger(t);
   });
+}
+
+// ===== 70_ApiCore.gs =====
+/**
+ * API logic, independent of HTTP so it can be unit-tested.
+ *
+ * The apps send a batch of "ops" (queued while offline, or a single edit) and
+ * get back a full snapshot. Every op is idempotent: replaying a batch after a
+ * dropped connection does no harm, because ids are generated by the app.
+ *
+ * Op types:
+ *   upsertBooking   { booking }        create or edit (any field)
+ *   cancelBooking   { id }
+ *   deleteBooking   { id }             manual bookings only
+ *   upsertBlock     { block }
+ *   deleteBlock     { id }
+ *   resolveUnparsed { email_message_id, booking_id? }
+ *   setProperties   { properties: [..] }
+ */
+
+var BOOKING_INPUT_FIELDS = [
+  'property', 'platform', 'platform_booking_id', 'guest_name', 'guests_count',
+  'check_in', 'check_out', 'guest_total_paid', 'in_hand_amount', 'costs', 'status', 'notes'
+];
+var BLOCK_INPUT_FIELDS = ['property', 'start_date', 'end_date', 'reason', 'notes'];
+
+function ApiError(message) { this.name = 'ApiError'; this.message = message; }
+ApiError.prototype = Object.create(Error.prototype);
+
+function applyOps(store, ops, ctx) {
+  return (ops || []).map(function (op) {
+    try {
+      var data = applyOp(store, op, ctx);
+      return { op_id: op.op_id, ok: true, data: data || null };
+    } catch (err) {
+      return { op_id: op.op_id, ok: false, error: String(err && err.message || err) };
+    }
+  });
+}
+
+function applyOp(store, op, ctx) {
+  var p = op.payload || {};
+  switch (op.type) {
+    case 'upsertBooking': return upsertBooking_(store, p.booking || {}, ctx);
+    case 'cancelBooking': return cancelBooking_(store, p.id, ctx);
+    case 'deleteBooking': return deleteBooking_(store, p.id);
+    case 'upsertBlock': return upsertBlock_(store, p.block || {}, ctx);
+    case 'deleteBlock': return deleteBlock_(store, p.id);
+    case 'resolveUnparsed': return resolveUnparsed_(store, p.email_message_id, p.booking_id, ctx);
+    case 'setProperties': return setProperties_(store, p.properties);
+    default: throw new ApiError('Unknown op type: ' + op.type);
+  }
+}
+
+function findById_(list, id) {
+  for (var i = 0; i < list.length; i++) if (String(list[i].id) === String(id)) return list[i];
+  return null;
+}
+
+function cleanBookingInput_(input) {
+  var out = {};
+  BOOKING_INPUT_FIELDS.forEach(function (f) {
+    if (Object.prototype.hasOwnProperty.call(input, f)) out[f] = input[f] === null || input[f] === undefined ? '' : input[f];
+  });
+  ['guest_total_paid', 'in_hand_amount', 'costs'].forEach(function (f) {
+    if (f in out && out[f] !== '') {
+      var n = toNumberOrNull(out[f]);
+      if (n === null || n < 0) throw new ApiError(f + ' must be a positive amount');
+      out[f] = n;
+    }
+  });
+  if ('guests_count' in out && out.guests_count !== '') {
+    var g = parseInt(out.guests_count, 10);
+    if (!(g >= 0)) throw new ApiError('guests_count must be a number');
+    out.guests_count = g;
+  }
+  ['check_in', 'check_out'].forEach(function (f) {
+    if (f in out && out[f] !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(out[f])) throw new ApiError(f + ' must be YYYY-MM-DD');
+  });
+  if ('platform' in out && APP.PLATFORMS.indexOf(out.platform) < 0) throw new ApiError('Unknown platform ' + out.platform);
+  if ('status' in out && APP.STATUSES.indexOf(out.status) < 0) throw new ApiError('Unknown status ' + out.status);
+  if ('platform_booking_id' in out) out.platform_booking_id = String(out.platform_booking_id);
+  return out;
+}
+
+function upsertBooking_(store, input, ctx) {
+  if (!input.id) throw new ApiError('booking.id is required');
+  var data = cleanBookingInput_(input);
+  var existing = findById_(store.listBookings(), input.id);
+
+  if (!existing) {
+    var b = {
+      id: String(input.id), property: '', platform: 'Direct', platform_booking_id: '', guest_name: '',
+      guests_count: '', check_in: '', check_out: '', nights: 0, guest_total_paid: '', in_hand_amount: '',
+      costs: 0, status: 'confirmed', source: 'manual', edited_fields: '',
+      email_message_id: input.email_message_id || '', created_at: ctx.nowIso, updated_at: ctx.nowIso, notes: ''
+    };
+    for (var k in data) b[k] = data[k];
+    if (b.costs === '') b.costs = 0;
+    checkDates_(b.check_in, b.check_out);
+    b.nights = nightsBetween(b.check_in, b.check_out);
+    store.insertBooking(b);
+    if (b.email_message_id) resolveUnparsed_(store, b.email_message_id, b.id, ctx);
+    return { id: b.id };
+  }
+
+  var updated = shallowCopy_(existing);
+  var edited = parseEditedFields(existing.edited_fields);
+  var changed = false;
+  for (var f in data) {
+    if (String(existing[f] === undefined ? '' : existing[f]) === String(data[f])) continue;
+    updated[f] = data[f];
+    changed = true;
+    // For emailed bookings, remember hand edits so the parser never undoes them.
+    if (existing.source === 'email' && f !== 'notes' && f !== 'in_hand_amount' && f !== 'costs') edited.push(f);
+  }
+  if (!changed) return { id: existing.id, unchanged: true };
+  checkDates_(updated.check_in, updated.check_out);
+  updated.edited_fields = formatEditedFields(edited);
+  updated.nights = nightsBetween(updated.check_in, updated.check_out);
+  updated.updated_at = ctx.nowIso;
+  store.updateBooking(updated);
+  return { id: existing.id };
+}
+
+function checkDates_(checkIn, checkOut) {
+  if (!checkIn || !checkOut) throw new ApiError('check_in and check_out are required');
+  if (nightsBetween(checkIn, checkOut) < 1) throw new ApiError('check_out must be after check_in');
+}
+
+function cancelBooking_(store, id, ctx) {
+  var b = findById_(store.listBookings(), id);
+  if (!b) throw new ApiError('No booking ' + id);
+  if (b.status === 'cancelled') return { id: id, unchanged: true };
+  return upsertBooking_(store, { id: id, status: 'cancelled' }, ctx);
+}
+
+function deleteBooking_(store, id) {
+  var b = findById_(store.listBookings(), id);
+  if (!b) return { id: id, unchanged: true };
+  if (b.source === 'email') throw new ApiError('Bookings from email can be cancelled but not deleted');
+  store.deleteBookingRow(b._row);
+  return { id: id };
+}
+
+function upsertBlock_(store, input, ctx) {
+  if (!input.id) throw new ApiError('block.id is required');
+  var data = {};
+  BLOCK_INPUT_FIELDS.forEach(function (f) { if (f in input) data[f] = input[f] == null ? '' : input[f]; });
+  var existing = findById_(store.listBlocks(), input.id);
+  var b = existing ? shallowCopy_(existing) : { id: String(input.id), property: '', reason: 'other', notes: '', created_at: ctx.nowIso };
+  for (var k in data) b[k] = data[k];
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(b.start_date) || !/^\d{4}-\d{2}-\d{2}$/.test(b.end_date)) throw new ApiError('Block dates must be YYYY-MM-DD');
+  if (b.end_date < b.start_date) throw new ApiError('Block end_date is before start_date');
+  if (APP.BLOCK_REASONS.indexOf(b.reason) < 0) throw new ApiError('Unknown block reason ' + b.reason);
+  b.updated_at = ctx.nowIso;
+  if (existing) store.updateBlock(b); else store.insertBlock(b);
+  return { id: b.id };
+}
+
+function deleteBlock_(store, id) {
+  var b = findById_(store.listBlocks(), id);
+  if (!b) return { id: id, unchanged: true };
+  store.deleteBlockRow(b._row);
+  return { id: id };
+}
+
+function resolveUnparsed_(store, messageId, bookingId, ctx) {
+  var log = store.listLogs().filter(function (l) { return l.email_message_id === messageId; })[0];
+  if (!log) return { unchanged: true };
+  log.resolved = ctx.nowIso;
+  if (bookingId) log.booking_id = bookingId;
+  store.updateLog(log);
+  return { email_message_id: messageId };
+}
+
+function setProperties_(store, properties) {
+  if (!Array.isArray(properties) || !properties.length) throw new ApiError('properties must be a non-empty list');
+  var clean = properties.map(function (p) { return String(p).replace(/,/g, ' ').trim(); }).filter(String);
+  store.setSetting('properties', clean.join(', '));
+  return { properties: clean };
+}
+
+/** Everything the app needs, in one response. */
+function buildSnapshot(store, ctx) {
+  var settings = store.getSettings();
+  var strip = function (o) { var c = shallowCopy_(o); delete c._row; return c; };
+  var numeric = function (b) {
+    ['guest_total_paid', 'in_hand_amount', 'costs', 'guests_count', 'nights'].forEach(function (f) {
+      b[f] = toNumberOrNull(b[f]);
+    });
+    b.platform_booking_id = String(b.platform_booking_id || '');
+    b.edited_fields = parseEditedFields(b.edited_fields);
+    return b;
+  };
+  return {
+    server_time: ctx.nowIso,
+    version: APP.VERSION,
+    settings: {
+      currency: settings.currency || 'INR',
+      properties: String(settings.properties || '').split(',').map(function (s) { return s.trim(); }).filter(String),
+      default_property: settings.default_property || ''
+    },
+    bookings: store.listBookings().map(strip).map(numeric),
+    blocks: store.listBlocks().map(strip),
+    unparsed: store.listLogs()
+      .filter(function (l) { return l.result === 'failed' && !l.resolved; })
+      .map(function (l) {
+        return {
+          email_message_id: l.email_message_id, platform: l.platform, subject: l.subject, from: l.from,
+          received_at: l.received_at, error: l.error,
+          gmail_url: 'https://mail.google.com/mail/u/0/#all/' + (l.thread_id || l.email_message_id)
+        };
+      }),
+    sheet_xlsx_url: ctx.sheetXlsxUrl || ''
+  };
+}
+
+// ===== 71_Api.gs =====
+/**
+ * Web App entry points (Deploy > New deployment > Web app, Execute as: Me,
+ * Who has access: Anyone). Every request must carry the secret API key as the
+ * `key` parameter or POST body field; Apps Script cannot read custom headers.
+ *
+ *   GET  ?key=…&action=ping
+ *   GET  ?key=…&action=snapshot
+ *   POST {"key":"…","action":"apply","ops":[…]}   -> { results, snapshot }
+ *   POST {"key":"…","action":"sync"}               -> checks Gmail, then snapshot
+ *
+ * Responses are always JSON: { ok: true, data } or { ok: false, error }.
+ */
+
+function doGet(e) {
+  return handleRequest_((e && e.parameter) || {});
+}
+
+function doPost(e) {
+  var body = {};
+  try {
+    body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+  } catch (err) {
+    return jsonOut_({ ok: false, error: 'Body must be JSON' });
+  }
+  var params = (e && e.parameter) || {};
+  for (var k in params) if (!(k in body)) body[k] = params[k];
+  return handleRequest_(body);
+}
+
+function handleRequest_(req) {
+  try {
+    if (!checkApiKey_(req.key)) return jsonOut_({ ok: false, error: 'unauthorized' });
+    var action = req.action || 'snapshot';
+    if (action === 'ping') return jsonOut_({ ok: true, data: { version: APP.VERSION } });
+
+    var lock = LockService.getScriptLock();
+    if (!lock.tryLock(25000)) return jsonOut_({ ok: false, error: 'busy, try again' });
+    try {
+      var ctx = apiCtx_();
+      var store = new SheetStore(SpreadsheetApp.getActive());
+      var data;
+      if (action === 'snapshot') {
+        data = buildSnapshot(store, ctx);
+      } else if (action === 'apply') {
+        var ops = typeof req.ops === 'string' ? JSON.parse(req.ops) : req.ops;
+        data = { results: applyOps(store, ops, ctx), snapshot: buildSnapshot(new SheetStore(SpreadsheetApp.getActive()), ctx) };
+      } else if (action === 'sync') {
+        lock.releaseLock(); // processNewEmails takes the lock itself
+        lock = null;
+        var summary = processNewEmails();
+        data = { summary: summary, snapshot: buildSnapshot(new SheetStore(SpreadsheetApp.getActive()), apiCtx_()) };
+      } else {
+        return jsonOut_({ ok: false, error: 'unknown action ' + action });
+      }
+      return jsonOut_({ ok: true, data: data });
+    } finally {
+      if (lock) lock.releaseLock();
+    }
+  } catch (err) {
+    return jsonOut_({ ok: false, error: String(err && err.message || err) });
+  }
+}
+
+function apiCtx_() {
+  var now = new Date();
+  var tz = Session.getScriptTimeZone();
+  var ss = SpreadsheetApp.getActive();
+  return {
+    now: now,
+    nowIso: Utilities.formatDate(now, tz, "yyyy-MM-dd'T'HH:mm:ssXXX"),
+    todayIso: Utilities.formatDate(now, tz, 'yyyy-MM-dd'),
+    sheetXlsxUrl: 'https://docs.google.com/spreadsheets/d/' + ss.getId() + '/export?format=xlsx'
+  };
+}
+
+function jsonOut_(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+/** The key lives in Script Properties, never in the code or the Sheet. */
+function getApiKey_() {
+  var props = PropertiesService.getScriptProperties();
+  var key = props.getProperty('API_KEY');
+  if (!key) {
+    key = (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '');
+    props.setProperty('API_KEY', key);
+  }
+  return key;
+}
+
+function checkApiKey_(given) {
+  var key = getApiKey_();
+  if (typeof given !== 'string' || given.length !== key.length) return false;
+  var diff = 0;
+  for (var i = 0; i < key.length; i++) diff |= key.charCodeAt(i) ^ given.charCodeAt(i);
+  return diff === 0;
+}
+
+/** Menu: show the details to paste into the app. */
+function showConnectionDetails() {
+  var url = ScriptApp.getService().getUrl() || '(not deployed yet: see SETUP.md step 7)';
+  var html = HtmlService.createHtmlOutput(
+    '<div style="font-family:Arial;font-size:13px">' +
+    '<p><b>Web App URL</b></p><textarea style="width:100%;height:60px" readonly onclick="this.select()">' + url + '</textarea>' +
+    '<p><b>API key</b> (keep it secret)</p><textarea style="width:100%;height:40px" readonly onclick="this.select()">' + getApiKey_() + '</textarea>' +
+    '<p>Paste both into the app\'s Settings screen.</p></div>').setWidth(460).setHeight(280);
+  SpreadsheetApp.getUi().showModalDialog(html, 'Connect the app');
+}
+
+/** Menu: make a new key (the apps will need the new one). */
+function rotateApiKey() {
+  PropertiesService.getScriptProperties().deleteProperty('API_KEY');
+  getApiKey_();
+  showConnectionDetails();
 }

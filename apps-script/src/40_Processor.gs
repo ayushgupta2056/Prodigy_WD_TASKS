@@ -3,7 +3,7 @@
  * so it can be tested without Google:
  *
  *   store:  getSettings(), listBookings(), insertBooking(b), updateBooking(b),
- *           processedMessageIds() -> object set, appendLog(entry)
+ *           listLogs(), appendLog(entry), updateLog(entry)
  *   source: search(query) -> [email], label(email, labelName)
  *           where email = { id, threadId, from, subject, date, plain(), html() }
  *
@@ -12,6 +12,9 @@
  * search does NOT skip labelled threads; each message is processed once,
  * tracked by its Gmail message id in ParserLog. A booking is matched by
  * platform + platform booking id.
+ *
+ * Retry: an email that failed to parse is tried again (once) whenever
+ * APP.PARSER_VERSION is bumped, i.e. after a parser is improved.
  */
 
 /** Entry point for the 5-minute trigger. */
@@ -58,9 +61,10 @@ function runProcessor(store, source, ctx) {
 
   if (filters.length) {
     var windowDays = ctx.windowDays || parseInt(settings.search_window_days, 10) || 30;
-    var seen = store.processedMessageIds();
+    var logIndex = {};
+    store.listLogs().forEach(function (l) { if (l.email_message_id) logIndex[l.email_message_id] = l; });
     var emails = source.search(buildGmailQuery(filters, windowDays))
-      .filter(function (e) { return !seen[e.id]; })
+      .filter(function (e) { return !isDone_(logIndex[e.id]); })
       .sort(function (a, b) { return a.date - b.date; }); // booking before its cancellation
 
     var bookings = store.listBookings();
@@ -77,7 +81,12 @@ function runProcessor(store, source, ctx) {
         email_message_id: email.id, thread_id: email.threadId, platform: platform,
         result: '', type: '', platform_booking_id: '', booking_id: '', error: '',
         subject: email.subject || '', from: email.from || '',
-        received_at: email.date ? email.date.toISOString() : '', timestamp: ctx.nowIso, resolved: ''
+        received_at: email.date ? email.date.toISOString() : '', timestamp: ctx.nowIso, resolved: '',
+        parser_version: APP.PARSER_VERSION
+      };
+      var previous = logIndex[email.id];
+      var writeLog = function (entry) {
+        if (previous) { entry._row = previous._row; store.updateLog(entry); } else store.appendLog(entry);
       };
 
       var parsed;
@@ -89,7 +98,7 @@ function runProcessor(store, source, ctx) {
       } catch (err) {
         log.result = 'failed';
         log.error = String(err && err.message || err);
-        store.appendLog(log);
+        writeLog(log);
         source.label(email, APP.LABEL_UNPARSED);
         summary.failed++;
         continue;
@@ -128,7 +137,7 @@ function runProcessor(store, source, ctx) {
           summary.unchanged++;
         }
       }
-      store.appendLog(log);
+      writeLog(log);
       source.label(email, APP.LABEL_PROCESSED);
       summary.processed++;
     }
@@ -138,6 +147,12 @@ function runProcessor(store, source, ctx) {
   toComplete.forEach(function (b) { store.updateBooking(b); });
   summary.completed = toComplete.length;
   return summary;
+}
+
+function isDone_(log) {
+  if (!log) return false;
+  if (log.result === 'ok' || log.resolved) return true;
+  return String(log.parser_version) === String(APP.PARSER_VERSION);
 }
 
 /** Gmail implementation of the `source` interface. */

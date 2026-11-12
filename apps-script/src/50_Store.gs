@@ -79,12 +79,20 @@ SheetStore.prototype.listBookings = function () { return this.table(APP.SHEETS.B
 SheetStore.prototype.insertBooking = function (b) { return this.table(APP.SHEETS.BOOKINGS).append(b); };
 SheetStore.prototype.updateBooking = function (b) { return this.table(APP.SHEETS.BOOKINGS).update(b); };
 
-SheetStore.prototype.processedMessageIds = function () {
-  var set = {};
-  this.table(APP.SHEETS.PARSER_LOG).readAll().forEach(function (r) {
-    if (r.email_message_id) set[r.email_message_id] = true;
-  });
-  return set;
-};
-
+SheetStore.prototype.listLogs = function () { return this.table(APP.SHEETS.PARSER_LOG).readAll(); };
 SheetStore.prototype.appendLog = function (entry) { return this.table(APP.SHEETS.PARSER_LOG).append(entry); };
+SheetStore.prototype.updateLog = function (entry) { return this.table(APP.SHEETS.PARSER_LOG).update(entry); };
+
+SheetStore.prototype.listBlocks = function () { return this.table(APP.SHEETS.BLOCKS).readAll(); };
+SheetStore.prototype.insertBlock = function (b) { return this.table(APP.SHEETS.BLOCKS).append(b); };
+SheetStore.prototype.updateBlock = function (b) { return this.table(APP.SHEETS.BLOCKS).update(b); };
+
+/** Delete rows by sheet row number (highest first so numbers stay valid). */
+SheetStore.prototype.deleteBookingRow = function (row) { this.table(APP.SHEETS.BOOKINGS).sheet.deleteRow(row); };
+SheetStore.prototype.deleteBlockRow = function (row) { this.table(APP.SHEETS.BLOCKS).sheet.deleteRow(row); };
+
+SheetStore.prototype.setSetting = function (key, value) {
+  var t = this.table(APP.SHEETS.SETTINGS);
+  var row = t.readAll().filter(function (r) { return r.key === key; })[0];
+  if (row) { row.value = value; t.update(row); } else t.append({ key: key, value: value, notes: '' });
+};

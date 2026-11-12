@@ -8,6 +8,9 @@ function onOpen() {
     .addItem('Process new emails now', 'processNewEmailsFromMenu')
     .addItem('Import last 12 months of emails', 'backfillLastYear')
     .addSeparator()
+    .addItem('Show Web App URL and API key', 'showConnectionDetails')
+    .addItem('Make a new API key', 'rotateApiKey')
+    .addSeparator()
     .addItem('Turn automatic checking on (every 5 min)', 'installTrigger')
     .addItem('Turn automatic checking off', 'removeTrigger')
     .addToUi();
@@ -32,6 +35,7 @@ function setup() {
     if (!GmailApp.getUserLabelByName(name)) GmailApp.createLabel(name);
   });
 
+  getApiKey_();
   installTrigger();
   ss.toast('Setup complete. Gmail is now checked every 5 minutes.', 'Booking App', 10);
 }

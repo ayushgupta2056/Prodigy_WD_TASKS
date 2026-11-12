@@ -3,13 +3,11 @@
 Everything runs inside **your own Google account**. There's no server to rent and
 nothing to pay for. It takes about 10 minutes, and you only do it once.
 
-> **Stage 1 status.** These steps set up the Sheet and the automatic Gmail check.
-> The email parsers are still waiting for your sample emails (see
-> `samples/README.md`), so until then every booking email is listed in
-> **ParserLog** as `failed` and labelled `BookingApp/Unparsed` in Gmail. Nothing
-> is lost. Once the parsers are added, use **Import last 12 months of emails** to
-> pick those emails up again.
-> The Web App section (step 7) arrives in Stage 2.
+> **Email parsers status.** The parsers are still waiting for your sample
+> emails (see `samples/README.md`). Until then, every booking email is listed
+> in the app under **Unparsed emails**, where you can create the booking by
+> hand. Nothing is lost: when the parsers are added, those emails are read
+> again automatically.
 
 ## 1. Create the Google Sheet
 
@@ -85,10 +83,36 @@ Setup already turned this on. To confirm, in Apps Script click **⏰ Triggers**
 
 To run it right away, use **Booking App → Process new emails now**.
 
-## 7. Deploy the Web App (Stage 2)
+## 7. Deploy the Web App (the link the apps use)
 
-*Coming in Stage 2: deploying the API the Windows and Android apps connect to, and
-copying the Web App URL and API key.*
+1. In Apps Script, click the blue **Deploy** button (top right), then **New deployment**.
+2. Click the gear ⚙ next to *Select type* and choose **Web app**.
+3. Fill in:
+   - **Description**: `Booking app`
+   - **Execute as**: **Me** (your email)
+   - **Who has access**: **Anyone**
+4. Click **Deploy**. If Google asks for permission again, approve it the same way as in step 4.
+5. Copy the **Web app URL**. It looks like
+   `https://script.google.com/macros/s/AKfy…/exec`.
+
+> **Is "Anyone" safe?** The link does nothing without your secret API key, and
+> the key is checked on every request. Never share the key. If you think it
+> leaked, use **Booking App → Make a new API key** and paste the new key into
+> the apps.
+
+## 8. Connect the apps
+
+1. Back in the Sheet, click **Booking App → Show Web App URL and API key**.
+2. Open the app on Windows or Android. On the first screen, paste the
+   **Web App URL** and the **API key**, then tap **Connect**.
+3. The app loads your bookings. From then on it syncs by itself when it opens,
+   when you pull down to refresh (Android), or when you click ↻ (Windows).
+
+### When you update the code later
+
+When you paste a new version of `BookingApp.gs`, go to **Deploy → Manage
+deployments → ✏️ Edit**, set **Version** to **New version**, and click
+**Deploy**. The URL stays the same, so nothing changes in the apps.
 
 ## Troubleshooting
 

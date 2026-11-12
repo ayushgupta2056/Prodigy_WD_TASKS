@@ -114,3 +114,17 @@ test('past stays are marked completed', () => {
   assert.equal(r.completed, 1);
   assert.equal(store.bookings[0].status, 'completed');
 });
+
+test('failed emails are retried once after the parser version is bumped', () => {
+  const store = new MemoryStore(settingsFromDefaults(gas));
+  const src = new FakeSource([mail('m1', '01', 'Reservation confirmed', newBooking)]);
+  gas.runProcessor(store, src, ctx()); // placeholder parser fails
+  assert.equal(gas.runProcessor(store, src, ctx()).failed, 0, 'not retried at same version');
+  gas.APP.PARSER_VERSION = 2;
+  try {
+    const r = gas.runProcessor(store, src, ctx({ parserOverride: jsonParser }));
+    assert.equal(r.created, 1);
+    assert.equal(store.logs.length, 1, 'log row updated, not duplicated');
+    assert.equal(store.logs[0].result, 'ok');
+  } finally { gas.APP.PARSER_VERSION = 1; }
+});

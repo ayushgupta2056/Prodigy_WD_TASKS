@@ -1,0 +1,149 @@
+name: Build apps
+
+# Builds the Windows .exe (zip + installer) and the Android .apk on every push.
+# Push a tag like v1.0.0 to also publish them as a GitHub Release.
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+env:
+  FLUTTER_VERSION: '3.50.0'
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Backend tests (Apps Script)
+        working-directory: apps-script
+        run: |
+          npm ci
+          npm test
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: App tests
+        working-directory: app
+        run: |
+          flutter pub get
+          flutter analyze --no-fatal-infos
+          flutter test
+
+  android:
+    name: Android APK
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Version
+        id: v
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then echo "name=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"; else echo "name=$(grep '^version:' app/pubspec.yaml | sed 's/version: //; s/+.*//')" >> "$GITHUB_OUTPUT"; fi
+      - name: Release signing key (optional, from secrets)
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        if: env.KEYSTORE_BASE64 != ''
+        working-directory: app/android
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 --decode > release.jks
+          printf 'storeFile=release.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > key.properties
+      - name: Build APK
+        working-directory: app
+        run: |
+          flutter pub get
+          flutter build apk --release --build-name=${{ steps.v.outputs.name }} --build-number=${{ github.run_number }}
+          mv build/app/outputs/flutter-apk/app-release.apk "BookingManager-${{ steps.v.outputs.name }}.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: app/BookingManager-*.apk
+          if-no-files-found: error
+
+  windows:
+    name: Windows EXE
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Version
+        id: v
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then echo "name=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"; else echo "name=$(grep '^version:' app/pubspec.yaml | sed 's/version: //; s/+.*//' | tr -d '\r')" >> "$GITHUB_OUTPUT"; fi
+      - name: Build
+        working-directory: app
+        run: |
+          flutter pub get
+          flutter build windows --release --build-name=${{ steps.v.outputs.name }} --build-number=${{ github.run_number }}
+      - name: Bundle the Visual C++ runtime next to the exe
+        shell: pwsh
+        run: |
+          $dest = "app/build/windows/x64/runner/Release"
+          foreach ($dll in "msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll") {
+            Copy-Item "$env:WINDIR\System32\$dll" $dest
+          }
+      - name: Zip (portable)
+        shell: pwsh
+        run: Compress-Archive -Path app/build/windows/x64/runner/Release/* -DestinationPath "app/BookingManager-${{ steps.v.outputs.name }}-windows.zip"
+      - name: Installer (Inno Setup)
+        shell: pwsh
+        run: |
+          if (-not (Get-Command iscc -ErrorAction SilentlyContinue)) { choco install innosetup -y --no-progress | Out-Null }
+          $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
+          if (-not $iscc) { $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
+          & $iscc "/DAppVersion=${{ steps.v.outputs.name }}" app/installer/windows.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            app/BookingManager-*-windows.zip
+            app/build/installer/BookingManager-Setup-*.exe
+          if-no-files-found: error
+
+  release:
+    name: GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [android, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/**/*.apk
+            dist/**/*.zip
+            dist/**/*.exe
+          generate_release_notes: true

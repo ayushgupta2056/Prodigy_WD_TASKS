@@ -7,7 +7,11 @@
  * the first time you run setup().
  */
 var APP = {
-  VERSION: '0.1.0',
+  VERSION: '0.2.0',
+
+  /** Bump whenever a parser changes: emails that failed to parse with an older
+   *  version are automatically tried again on the next run. */
+  PARSER_VERSION: 1,
 
   SHEETS: {
     BOOKINGS: 'Bookings',
@@ -41,7 +45,7 @@ var APP = {
     ParserLog: [
       'email_message_id', 'thread_id', 'platform', 'result', 'type',
       'platform_booking_id', 'booking_id', 'error',
-      'subject', 'from', 'received_at', 'timestamp', 'resolved'
+      'subject', 'from', 'received_at', 'timestamp', 'resolved', 'parser_version'
     ]
   },
 
