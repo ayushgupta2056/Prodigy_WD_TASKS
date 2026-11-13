@@ -42,9 +42,13 @@ class SettingsScreen extends StatelessWidget {
           const SectionHeader('Connection'),
           group([
             tile(
-              repo.mode == Mode.demo ? LucideIcons300.sparkles : LucideIcons300.plug,
-              repo.mode == Mode.demo ? 'Demo data' : 'Google Sheet backend',
-              subtitle: repo.mode == Mode.demo ? 'Nothing is saved to Google. Connect your Sheet to start.' : _mask(repo.url),
+              switch (repo.mode) { Mode.demo => LucideIcons300.sparkles, Mode.local => LucideIcons300.hardDrive, _ => LucideIcons300.plug },
+              switch (repo.mode) { Mode.demo => 'Demo data', Mode.local => 'Saved on this device only', _ => 'Google Sheet backend' },
+              subtitle: switch (repo.mode) {
+                Mode.demo => 'Nothing is saved to Google. Connect your Sheet to start.',
+                Mode.local => 'No email reading or syncing. Tap to connect your Google Sheet; your entries will be uploaded to it.',
+                _ => _mask(repo.url),
+              },
               onTap: () => showAdaptiveSheet<void>(context, builder: (ctx) => SingleChildScrollView(
                     child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                       Text('Connect your Google Sheet', style: AppText.h2(ctx)),
@@ -58,7 +62,23 @@ class SettingsScreen extends StatelessWidget {
                     ]),
                   )),
             ),
-            tile(LucideIcons300.refreshCw, 'Sync now', subtitle: 'Send changes, check Gmail for new bookings', onTap: repo.syncing ? null : () => repo.sync(checkEmails: true)),
+            if (repo.mode != Mode.local)
+              tile(LucideIcons300.refreshCw, 'Sync now', subtitle: 'Send changes, check Gmail for new bookings', onTap: repo.syncing ? null : () => repo.sync(checkEmails: true)),
+            if (repo.mode == Mode.demo)
+              tile(LucideIcons300.eraser, 'Delete demo data and start empty', subtitle: 'Your own entries will be saved on this device only', onTap: () async {
+                final ok = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Start empty?'),
+                    content: const Text('All demo bookings are removed. What you add from now on is saved on this device only.'),
+                    actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Start empty'))],
+                  ),
+                );
+                if (ok == true) {
+                  await repo.startLocal();
+                  if (context.mounted) savedFeedback(context, 'Demo data deleted');
+                }
+              }),
           ]),
           const SectionHeader('Properties'),
           const _PropertiesEditor(),
@@ -91,13 +111,16 @@ class SettingsScreen extends StatelessWidget {
           ),
           const SizedBox(height: Space.xxl),
           group([
-            tile(LucideIcons300.logOut, repo.mode == Mode.demo ? 'Leave demo' : 'Disconnect this device', color: c.negative, onTap: () async {
+            tile(LucideIcons300.logOut, switch (repo.mode) { Mode.demo => 'Leave demo', Mode.local => 'Delete all data on this device', _ => 'Disconnect this device' }, color: c.negative, onTap: () async {
+              final local = repo.mode == Mode.local;
               final ok = await showDialog<bool>(
                 context: context,
                 builder: (ctx) => AlertDialog(
-                  title: const Text('Disconnect?'),
-                  content: const Text('Clears the data saved on this device. Your Google Sheet is not touched.'),
-                  actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Disconnect'))],
+                  title: Text(local ? 'Delete everything?' : 'Disconnect?'),
+                  content: Text(local
+                      ? 'Your bookings are saved only on this device, so this deletes them for good. Export to Excel first if you want a copy.'
+                      : 'Clears the data saved on this device. Your Google Sheet is not touched.'),
+                  actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(local ? 'Delete' : 'Disconnect'))],
                 ),
               );
               if (ok == true) await repo.signOut();

@@ -11,7 +11,8 @@ import '../core/models.dart';
 import 'backend.dart';
 import 'local_ops.dart';
 
-enum Mode { unconfigured, demo, live }
+/// local: no Google account; everything is kept on this device only.
+enum Mode { unconfigured, demo, local, live }
 
 /// Single source of state for the UI.
 ///
@@ -62,6 +63,7 @@ class Repository extends ChangeNotifier {
     _backend = switch (mode) {
       Mode.live => RemoteBackend(url, apiKey),
       Mode.demo => DemoBackend(cached == null ? null : _server),
+      Mode.local => DemoBackend(_server),
       Mode.unconfigured => null,
     };
     _recompute();
@@ -76,11 +78,13 @@ class Repository extends ChangeNotifier {
     url = newUrl.trim();
     apiKey = newKey.trim();
     final switching = mode != Mode.live;
+    // Entries made in device-only mode are uploaded to the Sheet, not lost.
+    final carry = mode == Mode.local ? uploadOpsFor(view) : <Map<String, dynamic>>[];
     mode = Mode.live;
     _backend = backend;
     if (switching) {
       _server = Snapshot.empty;
-      pendingOps = [];
+      pendingOps = carry;
     }
     await _box.putAll({'url': url, 'apiKey': apiKey, 'mode': mode.name});
     await _persist();
@@ -101,6 +105,29 @@ class Repository extends ChangeNotifier {
     lastSyncAt = DateTime.now();
     notifyListeners();
   }
+
+  /// Start with an empty calendar saved only on this device (no Google).
+  Future<void> startLocal() async {
+    mode = Mode.local;
+    _server = Snapshot.empty;
+    _backend = DemoBackend(_server);
+    pendingOps = [];
+    lastSyncAt = null;
+    await _box.putAll({'mode': mode.name, 'url': '', 'apiKey': ''});
+    url = '';
+    apiKey = '';
+    await _persist();
+    _recompute();
+    notifyListeners();
+  }
+
+  /// Ops that recreate [s]'s manual data on a fresh backend.
+  @visibleForTesting
+  List<Map<String, dynamic>> uploadOpsFor(Snapshot s) => [
+        if (s.properties.isNotEmpty) {'op_id': newId(), 'type': 'setProperties', 'payload': {'properties': s.properties}},
+        for (final b in s.bookings) {'op_id': newId(), 'type': 'upsertBooking', 'payload': {'booking': b.toJson()}},
+        for (final b in s.blocks) {'op_id': newId(), 'type': 'upsertBlock', 'payload': {'block': b.toJson()}},
+      ];
 
   Future<void> signOut() async {
     mode = Mode.unconfigured;

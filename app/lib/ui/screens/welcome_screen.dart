@@ -49,6 +49,15 @@ class WelcomeScreen extends StatelessWidget {
                       label: const Text('Explore with demo data'),
                     ),
                   ),
+                  const SizedBox(height: Space.sm),
+                  SizedBox(
+                    width: double.infinity,
+                    child: TextButton.icon(
+                      onPressed: () => context.repoRead.startLocal(),
+                      icon: const Icon(LucideIcons300.hardDrive, size: 18),
+                      label: const Text('Start empty, save on this device only'),
+                    ),
+                  ),
                   const SizedBox(height: Space.md),
                   Text('Set-up steps are in SETUP.md: create the Google Sheet, deploy the Web App, then paste its URL and key here.',
                       style: AppText.label(context)),

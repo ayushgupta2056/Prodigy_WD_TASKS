@@ -113,11 +113,17 @@ class SyncStatus extends StatelessWidget {
       text = repo.lastSyncAt == null ? 'Not synced yet' : 'Synced ${_ago(repo.lastSyncAt!)}';
     }
     if (repo.mode.name == 'demo') text = 'Demo data · $text';
+    final local = repo.mode.name == 'local';
+    if (local) {
+      text = 'Saved on this device';
+      icon = LucideIcons300.hardDrive;
+      color = c.muted;
+    }
     return Row(mainAxisSize: MainAxisSize.min, children: [
       Icon(icon, size: 14, color: color),
       const SizedBox(width: 5),
       Text(text, style: AppText.label(context).copyWith(color: color)),
-      if (showButton) ...[
+      if (showButton && !local) ...[
         const SizedBox(width: 2),
         IconButton(
           tooltip: 'Sync now',
