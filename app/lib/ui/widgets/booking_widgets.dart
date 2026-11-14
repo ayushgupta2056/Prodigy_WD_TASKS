@@ -41,7 +41,7 @@ class BookingTile extends StatelessWidget {
             alignment: Alignment.center,
             child: overlap
                 ? Icon(LucideIcons500.triangleAlert, color: c.danger, size: 18)
-                : Text(b.guestName.isEmpty ? '?' : b.guestName.trim()[0].toUpperCase(),
+                : Text(b.guestName.trim().isEmpty ? '?' : firstName(b.guestName)[0].toUpperCase(),
                     style: AppText.title(context).copyWith(color: PlatformColors.of(context, b.platform))),
           ),
           const SizedBox(width: Space.md),

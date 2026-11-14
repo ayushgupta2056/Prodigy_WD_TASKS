@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:intl/intl.dart';
+import 'package:intl/intl.dart' show DateFormat;
 import 'package:material_ui/material_ui.dart';
 import '../../theme/icons.dart';
 
@@ -166,9 +166,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
       ),
       if (startOfMonth(today()) != _month)
         TextButton(onPressed: () => setState(() => _month = startOfMonth(today())), child: const Text('Today')),
-      _RoundIcon(LucideIcons300.chevronLeft, () => _shift(-1)),
+      _RoundIcon(LucideIcons300.chevronLeft, () => _shift(-1), 'Previous month'),
       const SizedBox(width: 6),
-      _RoundIcon(LucideIcons300.chevronRight, () => _shift(1)),
+      _RoundIcon(LucideIcons300.chevronRight, () => _shift(1), 'Next month'),
     ]);
 
     final grid = GestureDetector(
@@ -278,13 +278,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
 class _RoundIcon extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
-  const _RoundIcon(this.icon, this.onTap);
+  final String tooltip;
+  const _RoundIcon(this.icon, this.onTap, this.tooltip);
   @override
-  Widget build(BuildContext context) => Material(
+  Widget build(BuildContext context) => Tooltip(message: tooltip, child: Material(
         color: context.colors.surface,
         shape: CircleBorder(side: BorderSide(color: context.colors.hairline)),
         child: InkWell(customBorder: const CircleBorder(), onTap: onTap, child: Padding(padding: const EdgeInsets.all(10), child: Icon(icon, size: 18))),
-      );
+      ));
 }
 
 class _Legend extends StatelessWidget {
@@ -496,8 +497,8 @@ class _Bar extends StatelessWidget {
               decoration: BoxDecoration(borderRadius: radius, border: overlap ? Border.all(color: c.danger, width: 1.4) : null),
               padding: const EdgeInsets.symmetric(horizontal: 8),
               alignment: Alignment.centerLeft,
-              child: (seg.startsHere || seg.x0 == 0) && seg.x1 - seg.x0 >= 1.2
-                  ? Text('Blocked', maxLines: 1, overflow: TextOverflow.clip, softWrap: false, style: AppText.label(context).copyWith(fontSize: 11, color: c.inkSoft, fontWeight: FontWeight.w600))
+              child: (seg.startsHere || seg.x0 == 0)
+                  ? _FitLabel(const ['Blocked', 'Blk'], style: AppText.label(context).copyWith(fontSize: 11, color: c.inkSoft, fontWeight: FontWeight.w600))
                   : null,
             ),
           ),
@@ -514,27 +515,47 @@ class _Bar extends StatelessWidget {
       child: InkWell(
         borderRadius: radius,
         onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 7),
-          child: Row(children: [
-            if (seg.startsHere && seg.x1 - seg.x0 >= 0.8) ...[
-              Container(width: 6, height: 6, decoration: BoxDecoration(color: overlap ? Colors.white : pc, shape: BoxShape.circle)),
-              const SizedBox(width: 5),
-            ],
-            Expanded(
-              child: Text(
-                (seg.startsHere || seg.x0 == 0) && seg.x1 - seg.x0 >= 1.2 ? shortName(b.guestName) : '',
-                maxLines: 1,
-                softWrap: false,
-                overflow: TextOverflow.fade,
-                style: AppText.label(context).copyWith(fontSize: 11.5, fontWeight: FontWeight.w600, color: overlap ? Colors.white : (dark ? c.ink : Color.lerp(pc, Colors.black, 0.45))),
-              ),
-            ),
-          ]),
-        ),
+        child: LayoutBuilder(builder: (context, outer) => Padding(
+          // Tight padding on half-day stubs so even an initial fits.
+          padding: EdgeInsets.symmetric(horizontal: outer.maxWidth < 44 ? 2 : 7),
+          child: LayoutBuilder(builder: (context, box) {
+            final style = AppText.label(context).copyWith(fontSize: 11.5, fontWeight: FontWeight.w600, color: overlap ? Colors.white : (dark ? c.ink : Color.lerp(pc, Colors.black, 0.45)));
+            final labelled = seg.startsHere || seg.x0 == 0;
+            final names = [shortName(b.guestName), firstName(b.guestName), initials(b.guestName)];
+            // The platform dot only when the name still fits next to it.
+            final withDot = seg.startsHere && labelled && _FitLabel.fits(names[1], style, box.maxWidth - 11);
+            return Row(children: [
+              if (withDot) ...[
+                Container(width: 6, height: 6, decoration: BoxDecoration(color: overlap ? Colors.white : pc, shape: BoxShape.circle)),
+                const SizedBox(width: 5),
+              ],
+              if (labelled) Expanded(child: _FitLabel(names, style: style)),
+            ]);
+          }),
+        )),
       ),
     );
   }
+}
+
+/// Shows the first of [options] that fits the space (full name, first name,
+/// initials), so even a one-night stay on a phone shows who it is.
+class _FitLabel extends StatelessWidget {
+  final List<String> options;
+  final TextStyle style;
+  const _FitLabel(this.options, {required this.style});
+
+  static bool fits(String text, TextStyle style, double width) {
+    final tp = TextPainter(text: TextSpan(text: text, style: style), maxLines: 1, textDirection: TextDirection.ltr)..layout();
+    return tp.width <= width;
+  }
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(builder: (context, box) {
+        final scaled = style.copyWith(fontSize: MediaQuery.textScalerOf(context).scale(style.fontSize ?? 12));
+        final text = options.firstWhere((o) => fits(o, scaled, box.maxWidth), orElse: () => '');
+        return Text(text, maxLines: 1, softWrap: false, overflow: TextOverflow.clip, style: style);
+      });
 }
 
 class _HatchPainter extends CustomPainter {
