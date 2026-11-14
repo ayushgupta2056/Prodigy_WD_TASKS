@@ -9,6 +9,7 @@ import '../core/dates.dart';
 import '../core/insights.dart';
 import '../core/models.dart';
 import 'backend.dart';
+import 'import_file.dart';
 import 'local_ops.dart';
 
 /// local: no Google account; everything is kept on this device only.
@@ -192,6 +193,28 @@ class Repository extends ChangeNotifier {
 
   Future<void> _enqueue(String type, Map<String, dynamic> payload) async {
     pendingOps.add({'op_id': newId(), 'type': type, 'payload': payload});
+    await _persist();
+    _recompute();
+    notifyListeners();
+    _scheduleSync();
+  }
+
+  /// Adds (or updates, by id) every booking and blocked period in [f].
+  /// Properties in the file are added to the list, never removed.
+  Future<void> importFile(ImportFile f) async {
+    final props = [...view.properties];
+    for (final p in f.properties) {
+      if (!props.contains(p)) props.add(p);
+    }
+    if (props.length != view.properties.length) {
+      pendingOps.add({'op_id': newId(), 'type': 'setProperties', 'payload': {'properties': props}});
+    }
+    for (final b in f.bookings) {
+      pendingOps.add({'op_id': newId(), 'type': 'upsertBooking', 'payload': {'booking': b.toJson()}});
+    }
+    for (final b in f.blocks) {
+      pendingOps.add({'op_id': newId(), 'type': 'upsertBlock', 'payload': {'block': b.toJson()}});
+    }
     await _persist();
     _recompute();
     notifyListeners();

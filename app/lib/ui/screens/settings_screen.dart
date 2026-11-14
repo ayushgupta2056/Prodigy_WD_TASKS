@@ -6,6 +6,7 @@ import '../../data/repository.dart';
 import '../../theme/app_theme.dart';
 import '../app_scope.dart';
 import '../export_actions.dart';
+import '../import_actions.dart';
 import '../widgets/booking_widgets.dart';
 import '../widgets/common.dart';
 import 'pending_screen.dart';
@@ -91,6 +92,7 @@ class SettingsScreen extends StatelessWidget {
           ]),
           const SectionHeader('Data'),
           group([
+            tile(LucideIcons300.fileUp, 'Import bookings from file', subtitle: 'Add past stays from a Booking Manager import file (.json)', onTap: () => importFromFile(context)),
             tile(LucideIcons300.fileSpreadsheet, 'Export everything to Excel', onTap: () => exportToExcel(context)),
             if (repo.view.sheetXlsxUrl.isNotEmpty)
               tile(LucideIcons300.hardDriveDownload, 'Download from Google Sheet', subtitle: 'The raw Sheet as .xlsx',

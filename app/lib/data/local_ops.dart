@@ -11,7 +11,15 @@ Snapshot applyOpLocally(Snapshot s, Map<String, dynamic> op, {String nowIso = ''
       final i = s.bookings.indexWhere((b) => b.id == incoming.id);
       final list = [...s.bookings];
       if (i < 0) {
-        list.add(Booking.fromJson({...incoming.toJson(), 'source': 'manual', 'edited_fields': <String>[], 'created_at': nowIso, 'updated_at': nowIso}));
+        // An imported history keeps its own created_at (e.g. 'imported' when the
+        // booking date is unknown, so lead-time stats skip it).
+        list.add(Booking.fromJson({
+          ...incoming.toJson(),
+          'source': 'manual',
+          'edited_fields': <String>[],
+          'created_at': incoming.createdAt.isNotEmpty ? incoming.createdAt : nowIso,
+          'updated_at': nowIso,
+        }));
       } else {
         final old = list[i];
         final edited = old.isEmail ? {...old.editedFields, ...changedEmailFields(old, incoming)}.toList() : old.editedFields;

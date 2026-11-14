@@ -1098,7 +1098,9 @@ function upsertBooking_(store, input, ctx) {
       id: String(input.id), property: '', platform: 'Direct', platform_booking_id: '', guest_name: '',
       guests_count: '', check_in: '', check_out: '', nights: 0, guest_total_paid: '', in_hand_amount: '',
       costs: 0, status: 'confirmed', source: 'manual', edited_fields: '',
-      email_message_id: input.email_message_id || '', created_at: ctx.nowIso, updated_at: ctx.nowIso, notes: ''
+      email_message_id: input.email_message_id || '',
+      // Imported history keeps its own value ('imported' when the booking date is unknown).
+      created_at: input.created_at ? String(input.created_at) : ctx.nowIso, updated_at: ctx.nowIso, notes: ''
     };
     for (var k in data) b[k] = data[k];
     if (b.costs === '') b.costs = 0;
