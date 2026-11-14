@@ -156,6 +156,34 @@ class PlatformDot extends StatelessWidget {
       );
 }
 
+/// The booking site's logo in a small white circle (Direct: a house).
+class PlatformLogo extends StatelessWidget {
+  final String platform;
+  final double size;
+  const PlatformLogo(this.platform, {super.key, this.size = 16});
+  static const _files = {
+    'Airbnb': 'airbnb',
+    'MakeMyTrip': 'makemytrip',
+    'Goibibo': 'goibibo',
+    'Agoda': 'agoda',
+    'Booking.com': 'booking',
+  };
+  @override
+  Widget build(BuildContext context) {
+    final f = _files[platform];
+    final color = PlatformColors.of(context, platform);
+    return Container(
+      width: size,
+      height: size,
+      padding: EdgeInsets.all(size * 0.12),
+      decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, border: Border.all(color: color, width: 1)),
+      child: f == null
+          ? Icon(LucideIcons500.house, size: size * 0.6, color: color)
+          : ClipOval(child: Image.asset('assets/logos/$f.png', fit: BoxFit.contain, filterQuality: FilterQuality.medium)),
+    );
+  }
+}
+
 class Pill extends StatelessWidget {
   final String text;
   final Color? color;

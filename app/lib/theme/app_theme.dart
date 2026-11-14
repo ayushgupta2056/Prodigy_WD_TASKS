@@ -124,23 +124,24 @@ class AppColors extends ThemeExtension<AppColors> {
 
 /// Muted, harmonious platform colours (not the brands' loud colours).
 class PlatformColors {
+  // Clearly different hues, so platforms are easy to tell apart at a glance.
   static const _light = {
-    'Airbnb': Color(0xFFC77D74),
-    'MakeMyTrip': Color(0xFF5E7FAF),
-    'Goibibo': Color(0xFFCB9357),
-    'Agoda': Color(0xFF8C70A6),
-    'Booking.com': Color(0xFF4A8A88),
-    'Direct': Color(0xFF7C9463),
-    'Other': Color(0xFF9A9388),
+    'Airbnb': Color(0xFFE8385A), // rose red
+    'MakeMyTrip': Color(0xFF2563EB), // blue
+    'Goibibo': Color(0xFFEA7317), // orange
+    'Agoda': Color(0xFF7C3AED), // violet
+    'Booking.com': Color(0xFF0891B2), // cyan
+    'Direct': Color(0xFF16A34A), // green
+    'Other': Color(0xFF78716C), // grey
   };
   static const _dark = {
-    'Airbnb': Color(0xFFD9958C),
-    'MakeMyTrip': Color(0xFF86A2CC),
-    'Goibibo': Color(0xFFDDAA72),
-    'Agoda': Color(0xFFAE93C6),
-    'Booking.com': Color(0xFF6FB1AE),
-    'Direct': Color(0xFF9DB584),
-    'Other': Color(0xFFA7A196),
+    'Airbnb': Color(0xFFFF6B85),
+    'MakeMyTrip': Color(0xFF60A5FA),
+    'Goibibo': Color(0xFFFB923C),
+    'Agoda': Color(0xFFA78BFA),
+    'Booking.com': Color(0xFF22D3EE),
+    'Direct': Color(0xFF4ADE80),
+    'Other': Color(0xFFA8A29E),
   };
   static Color of(BuildContext context, String platform) {
     final dark = Theme.of(context).brightness == Brightness.dark;
