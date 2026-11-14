@@ -321,7 +321,6 @@ class _Seg {
   final bool startsHere;
   final bool endsHere;
   int lane = 0;
-  double room = 0; // day units free for the name, up to the next bar in this lane
   _Seg(this.item, this.x0, this.x1, this.startsHere, this.endsHere);
 }
 
@@ -382,10 +381,6 @@ class _MonthGrid extends StatelessWidget {
         laneEnds[lane] = s.x1;
       }
       s.lane = lane;
-    }
-    for (final s in segs) {
-      final next = segs.where((o) => o.lane == s.lane && o.x0 >= s.x1 - 0.01).map((o) => o.x0).fold<double>(7, math.min);
-      s.room = next - s.x0;
     }
     return segs;
   }
@@ -469,30 +464,6 @@ class _MonthGrid extends StatelessWidget {
                       if (it is Block) onBlockTap(it);
                     }),
                   ),
-                // Full guest names, drawn on top and not clipped to the bar.
-                for (final s in segs)
-                  if (s.item is Booking && (s.startsHere || s.x0 == 0))
-                    Positioned(
-                      left: s.x0 * cw + (s.startsHere ? 22 : 6),
-                      width: math.max(0, s.room * cw - (s.startsHere ? 24 : 8)),
-                      top: dayH + 4 + s.lane * laneH,
-                      height: laneH - 5,
-                      child: IgnorePointer(
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text((s.item as Booking).guestName.trim().isEmpty ? 'Guest' : (s.item as Booking).guestName.trim(),
-                              maxLines: 1,
-                              softWrap: false,
-                              overflow: TextOverflow.fade,
-                              style: AppText.label(context).copyWith(
-                                  fontSize: 11.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: overlapIds.contains((s.item as Booking).id)
-                                      ? (s.x1 - s.x0 >= s.room - 0.01 ? Colors.white : c.danger)
-                                      : _ink(context, (s.item as Booking).platform))),
-                        ),
-                      ),
-                    ),
               ]),
             );
           }),
@@ -502,12 +473,6 @@ class _MonthGrid extends StatelessWidget {
 
   static String _id(Object o) => o is Booking ? o.id : (o as Block).id;
 
-  /// Platform colour darkened (light theme) or lightened (dark) for text.
-  static Color _ink(BuildContext context, String platform) {
-    final pc = PlatformColors.of(context, platform);
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    return dark ? Color.lerp(pc, Colors.white, 0.35)! : Color.lerp(pc, Colors.black, 0.4)!;
-  }
 }
 
 class _Bar extends StatelessWidget {
@@ -545,17 +510,30 @@ class _Bar extends StatelessWidget {
     final pc = PlatformColors.of(context, b.platform);
     final bg = overlap ? c.danger : pc;
     final dark = Theme.of(context).brightness == Brightness.dark;
-    return Material(
-      color: overlap ? bg : bg.withValues(alpha: dark ? 0.38 : 0.24),
-      shape: RoundedRectangleBorder(borderRadius: radius, side: overlap ? BorderSide.none : BorderSide(color: pc, width: 1.1)),
-      child: InkWell(
-        borderRadius: radius,
-        onTap: onTap,
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: seg.startsHere
-              ? Padding(padding: const EdgeInsets.only(left: 3), child: PlatformLogo(b.platform, size: 16))
-              : null,
+    final name = b.guestName.trim().isEmpty ? 'Guest' : b.guestName.trim();
+    final ink = overlap ? Colors.white : (dark ? Color.lerp(pc, Colors.white, 0.35)! : Color.lerp(pc, Colors.black, 0.42)!);
+    final labelled = seg.startsHere || seg.x0 == 0;
+    return Tooltip(
+      message: '$name · ${b.platform} · ${fmtRange(b.checkIn, b.checkOut)}',
+      waitDuration: const Duration(milliseconds: 400),
+      child: Material(
+        color: overlap ? bg : bg.withValues(alpha: dark ? 0.36 : 0.18),
+        shape: RoundedRectangleBorder(borderRadius: radius, side: overlap ? BorderSide.none : BorderSide(color: pc.withValues(alpha: 0.85), width: 1)),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: LayoutBuilder(builder: (context, box) {
+            final narrow = box.maxWidth < 46;
+            return Padding(
+              padding: EdgeInsets.only(left: seg.startsHere ? 3 : 6, right: narrow ? 2 : 6),
+              child: Row(children: [
+                if (seg.startsHere && box.maxWidth >= 22) ...[PlatformLogo(b.platform, size: 15), SizedBox(width: narrow ? 2 : 5)],
+                if (labelled)
+                  // Full name when it fits, else first name, else initials. Never spills out.
+                  Expanded(child: _FitLabel([name, firstName(name), initials(name)], style: AppText.label(context).copyWith(fontSize: 11.5, height: 1.1, fontWeight: FontWeight.w600, color: ink))),
+              ]),
+            );
+          }),
         ),
       ),
     );
