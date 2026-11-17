@@ -137,10 +137,26 @@ class Repository extends ChangeNotifier {
     pendingOps = [];
     url = '';
     apiKey = '';
+    final seeded = _box.get('seed_done', defaultValue: false) == true;
     await _box.clear();
     await _box.put('themeMode', themeMode);
+    // Keep the "bundled history already loaded" mark so deleted data stays deleted.
+    if (seeded) await _box.put('seed_done', true);
     _recompute();
     notifyListeners();
+  }
+
+  /// First launch of a private build that ships its own history file
+  /// (assets/seed/history.json, never committed): start in local mode with it.
+  /// Runs once per install; later launches and deleted data are left alone.
+  Future<void> loadBundledHistory(Future<String?> Function() read) async {
+    if (mode != Mode.unconfigured || _box.get('seed_done', defaultValue: false) == true) return;
+    final text = await read();
+    if (text == null || text.trim().isEmpty) return;
+    final file = ImportFile.parse(text);
+    await startLocal();
+    await importFile(file);
+    await _box.put('seed_done', true);
   }
 
   // ---- Sync -------------------------------------------------------------------

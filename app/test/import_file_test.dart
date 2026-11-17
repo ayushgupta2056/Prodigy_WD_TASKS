@@ -45,4 +45,30 @@ void main() {
     await Hive.close();
     await dir.delete(recursive: true);
   });
+
+  test('a bundled history file loads once on first launch, and deleted data stays deleted', () async {
+    final dir = await Directory.systemTemp.createTemp('bm');
+    Hive.init(dir.path);
+    final text = file([stay('a', '2026-05-01', '2026-05-03', inHand: 5000), stay('b', '2026-06-01', '2026-06-02')]);
+    final repo = Repository(await Hive.openBox('app'));
+    await repo.load();
+    await repo.loadBundledHistory(() async => text);
+    expect(repo.mode, Mode.local);
+    expect(repo.view.bookings.length, 2);
+
+    await repo.loadBundledHistory(() async => text); // second launch: nothing new
+    expect(repo.view.bookings.length, 2);
+
+    await repo.signOut();
+    await repo.load();
+    await repo.loadBundledHistory(() async => text);
+    expect(repo.mode, Mode.unconfigured);
+
+    final none = Repository(await Hive.openBox('other'));
+    await none.load();
+    await none.loadBundledHistory(() async => null); // normal builds ship no file
+    expect(none.mode, Mode.unconfigured);
+    await Hive.close();
+    await dir.delete(recursive: true);
+  });
 }

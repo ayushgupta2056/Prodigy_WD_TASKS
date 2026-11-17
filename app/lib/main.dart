@@ -24,6 +24,9 @@ Future<void> main() async {
   final box = await _openStorage();
   final repo = Repository(box);
   await repo.load();
+  if (!kIsWeb) {
+    await repo.loadBundledHistory(() => rootBundle.loadString('assets/seed/history.json').then<String?>((t) => t, onError: (_) => null)).catchError((_) {});
+  }
   // The web build is a preview only: open straight into demo data.
   if (repo.mode == Mode.unconfigured && kIsWeb) {
     await repo.startDemo();
