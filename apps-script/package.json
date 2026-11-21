@@ -1,0 +1,13 @@
+{
+  "name": "booking-app-backend",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Apps Script backend for the Booking & Profit Manager, with local tests",
+  "scripts": {
+    "bundle": "node tools/bundle.js",
+    "test": "node --test tests/*.test.js"
+  },
+  "devDependencies": {
+    "mailparser": "3.7.1"
+  }
+}
