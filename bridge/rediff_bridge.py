@@ -115,10 +115,10 @@ def main():
     if missing:
         print('Rediff bridge not set up yet (missing: %s). Nothing to do.' % ', '.join(missing))
         return 0
-    domains = [d.strip().lower() for d in os.environ.get('BRIDGE_SENDERS', 'agoda.com,makemytrip.com').split(',') if d.strip()]
-    protocol = os.environ.get('REDIFF_PROTOCOL', 'pop3').lower()
+    domains = [d.strip().lower() for d in (os.environ.get('BRIDGE_SENDERS') or 'agoda.com,makemytrip.com').split(',') if d.strip()]
+    protocol = (os.environ.get('REDIFF_PROTOCOL') or 'pop3').lower()
     host = os.environ.get('REDIFF_HOST') or ('imap.rediffmail.com' if protocol == 'imap' else 'pop.rediffmail.com')
-    scan = int(os.environ.get('BRIDGE_SCAN', '60'))
+    scan = int(os.environ.get('BRIDGE_SCAN') or '60')
     reader = rediff_imap if protocol == 'imap' else rediff_pop3
 
     try:
