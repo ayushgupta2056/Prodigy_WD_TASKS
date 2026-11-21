@@ -39,3 +39,14 @@ test('placeholder parsers refuse to guess', () => {
     assert.throws(() => gas.parseEmail(p, { subject: 's', plain: '', html: '' }), /waiting for sample emails/);
   }
 });
+
+test('forwarded emails reveal their original sender and subject', () => {
+  const g = gas.unwrapForwarded({ subject: 'Fwd: x', plain: 'hi\n\n---------- Forwarded message ---------\nFrom: *Airbnb* <automated@airbnb.com>\nDate: today\nSubject: Reservation confirmed\nTo: me\n\nBODY' });
+  assert.equal(gas.detectPlatform(g.from, g.subject, filters), 'Airbnb');
+  assert.equal(g.plain, 'BODY');
+  const o = gas.unwrapForwarded({ subject: 'FW: New Booking', plain: '-----Original Message-----\nFrom: noreply@makemytrip.com [mailto:noreply@makemytrip.com]\nSent: Monday\n\nBODY' });
+  assert.equal(gas.detectPlatform(o.from, o.subject, filters), 'MakeMyTrip');
+  assert.equal(gas.unwrapForwarded({ subject: 'hello', plain: 'no forward here' }), null);
+  assert.equal(gas.buildGmailQuery(filters, 30, ['me@rediffmail.com']),
+    'from:(airbnb.com OR makemytrip.com OR goibibo.com OR agoda.com OR booking.com OR me@rediffmail.com) newer_than:30d');
+});

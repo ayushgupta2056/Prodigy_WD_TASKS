@@ -94,11 +94,59 @@ function buildFilters(settings) {
   }).filter(function (f) { return f.senders.length > 0; });
 }
 
-/** Gmail search query covering every configured sender. */
-function buildGmailQuery(filters, windowDays) {
+/** Gmail search query covering every configured sender, plus your own
+ *  addresses that forward booking emails into this Gmail. */
+function buildGmailQuery(filters, windowDays, forwarders) {
   var senders = [];
   filters.forEach(function (f) { senders = senders.concat(f.senders); });
+  (forwarders || []).forEach(function (s) { if (senders.indexOf(s) < 0) senders.push(s); });
   return 'from:(' + senders.join(' OR ') + ') newer_than:' + (windowDays || 30) + 'd';
+}
+
+/** Your other mailboxes (e.g. Rediffmail) that forward booking emails here.
+ *  Settings tab key "forwarded_from": comma-separated addresses. */
+function forwardSenders(settings) {
+  return String(settings.forwarded_from || '')
+    .split(',').map(function (s) { return s.trim().toLowerCase(); }).filter(String);
+}
+
+function senderMatches_(addr, s) {
+  return s.indexOf('@') >= 0 ? addr === s : (addr.slice(-(s.length + 1)) === '@' + s || addr.slice(-(s.length + 1)) === '.' + s);
+}
+
+/** Is this email from one of the given addresses/domains? */
+function isFromAny(from, senders) {
+  var addr = extractAddress_(from);
+  return senders.some(function (s) { return senderMatches_(addr, s); });
+}
+
+/**
+ * A forwarded email carries the original sender and subject in a header block
+ * inside the body ("---------- Forwarded message ---------", "-----Original
+ * Message-----", "Begin forwarded message:"). Returns the original
+ * { from, subject, plain, html }, or null if this is not a forward.
+ */
+function unwrapForwarded(email) {
+  var text = String(email.plain || '');
+  var m = text.match(/(?:-{2,}\s*Forwarded message\s*-{2,}|-{2,}\s*Original Message\s*-{2,}|Begin forwarded message:)/i);
+  if (!m) return null;
+  var lines = text.slice(m.index + m[0].length).split(/\r?\n/);
+  var hdr = {};
+  var i = 0;
+  for (; i < lines.length && i < 15; i++) {
+    var line = lines[i].replace(/^>\s?/, '').replace(/\*/g, '').trim();
+    if (!line) { if (hdr.from) break; continue; }
+    var h = line.match(/^(From|Sent|Date|Subject|To|Cc|Reply-To)\s*:\s*(.*)$/i);
+    if (!h) { if (hdr.from) break; continue; }
+    hdr[h[1].toLowerCase()] = h[2].trim();
+  }
+  if (!hdr.from) return null;
+  return {
+    from: hdr.from,
+    subject: hdr.subject || String(email.subject || '').replace(/^\s*((fwd?|fw)\s*:\s*)+/i, ''),
+    plain: lines.slice(i).join('\n').trim(),
+    html: email.html || ''
+  };
 }
 
 /** Which platform (if any) does this email belong to? */
@@ -106,9 +154,7 @@ function detectPlatform(from, subject, filters) {
   var addr = extractAddress_(from);
   for (var i = 0; i < filters.length; i++) {
     var f = filters[i];
-    var senderOk = f.senders.some(function (s) {
-      return s.indexOf('@') >= 0 ? addr === s : (addr.slice(-(s.length + 1)) === '@' + s || addr.slice(-(s.length + 1)) === '.' + s);
-    });
+    var senderOk = f.senders.some(function (s) { return senderMatches_(addr, s); });
     if (senderOk && (!f.subjectRegex || f.subjectRegex.test(subject || ''))) return f.platform;
   }
   return null;
@@ -116,6 +162,6 @@ function detectPlatform(from, subject, filters) {
 
 function extractAddress_(from) {
   var s = String(from || '').toLowerCase();
-  var m = s.match(/<([^>]+)>/);
+  var m = s.match(/<([^>]+)>/) || s.match(/mailto:([^\]\s]+)/) || s.match(/([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})/);
   return (m ? m[1] : s).trim();
 }

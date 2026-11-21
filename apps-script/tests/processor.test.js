@@ -128,3 +128,35 @@ test('failed emails are retried once after the parser version is bumped', () => 
     assert.equal(store.logs[0].result, 'ok');
   } finally { gas.APP.PARSER_VERSION = 1; }
 });
+
+// A booking email forwarded from your Rediffmail into Gmail.
+const fwd = (id, day, body, from = 'Me <me@rediffmail.com>', header = '---------- Forwarded message ---------') => ({
+  id, from, subject: 'Fwd: Reservation confirmed', date: new Date(`2026-11-${day}T09:00:00Z`),
+  plainText: `see below\n\n${header}\nFrom: Airbnb <automated@airbnb.com>\nDate: Sat, 21 Nov 2026 at 10:02\nSubject: Reservation confirmed - Rahul S arrives Nov 20\nTo: <me@rediffmail.com>\n\n${JSON.stringify(body)}`,
+});
+
+test('booking emails forwarded from your other mailbox are read like direct ones', () => {
+  const store = new MemoryStore(settingsFromDefaults(gas, { forwarded_from: 'me@rediffmail.com' }));
+  const src = new FakeSource([fwd('m1', '01', newBooking)]);
+  const r = gas.runProcessor(store, src, ctx({ parserOverride: jsonParser }));
+  assert.equal(r.created, 1);
+  assert.equal(store.bookings[0].platform, 'Airbnb');
+  assert.equal(store.bookings[0].guest_name, 'Rahul S');
+  assert.match(src.queries[0], /me@rediffmail\.com/);
+});
+
+test('the same booking arriving directly and forwarded is stored once', () => {
+  const store = new MemoryStore(settingsFromDefaults(gas, { forwarded_from: 'me@rediffmail.com' }));
+  const src = new FakeSource([mail('m1', '01', 'Reservation confirmed', newBooking), fwd('m2', '01', newBooking, 'me@rediffmail.com', '-----Original Message-----')]);
+  gas.runProcessor(store, src, ctx({ parserOverride: jsonParser }));
+  assert.equal(store.bookings.length, 1);
+});
+
+test('forwards from anyone else, or of non-booking mail, are ignored', () => {
+  const store = new MemoryStore(settingsFromDefaults(gas, { forwarded_from: 'me@rediffmail.com' }));
+  const notBooking = { ...fwd('m2', '01', newBooking), plainText: '---------- Forwarded message ---------\nFrom: friend@gmail.com\nSubject: booking\n\nhi' };
+  const src = new FakeSource([fwd('m1', '01', newBooking, 'Stranger <x@rediffmail.com>'), notBooking]);
+  const r = gas.runProcessor(store, src, ctx({ parserOverride: jsonParser }));
+  assert.equal(r.created, 0);
+  assert.equal(store.logs.length, 0);
+});

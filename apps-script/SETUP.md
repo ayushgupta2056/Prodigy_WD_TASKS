@@ -138,3 +138,16 @@ npm run bundle    # rebuild dist/BookingApp.gs after editing src/
 Source files live in `src/` (one file per parser). Apps Script shares a single
 global scope across files, so `dist/BookingApp.gs` is simply all of them joined
 together.
+
+## Booking emails that arrive in another mailbox (e.g. Rediffmail)
+
+The script reads only this Gmail. For sites that email another address:
+
+1. Best: in that site's partner/extranet settings, add this Gmail as an extra
+   reservation-email address (keep the old one too). Nothing else to do.
+2. Otherwise, set up auto-forwarding (or a forwarding filter) in the other
+   mailbox to this Gmail, then type that mailbox's address in the Settings tab
+   under `forwarded_from` (comma-separated if more than one). Forwarded booking
+   emails are then read like direct ones, using the original sender inside the
+   forward. Forwards from any other address are ignored, and a booking that
+   arrives both ways is stored once.

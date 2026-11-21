@@ -87,6 +87,7 @@ var DEFAULT_SETTINGS = [
   ['properties', 'My Homestay', 'Comma-separated list of your properties'],
   ['default_property', 'My Homestay', 'Property used for emailed bookings when the email does not say which one'],
   ['search_window_days', '30', 'How many days back each 5-minute run looks in Gmail'],
+  ['forwarded_from', '', 'Your other email addresses (e.g. you@rediffmail.com) that forward booking emails to this Gmail, comma-separated'],
   ['filter.Airbnb.senders', 'airbnb.com', ''],
   ['filter.Airbnb.subject_regex', 'reservation|booking|cancel', 'Provisional'],
   ['filter.MakeMyTrip.senders', 'makemytrip.com', ''],

@@ -63,7 +63,8 @@ function runProcessor(store, source, ctx) {
     var windowDays = ctx.windowDays || parseInt(settings.search_window_days, 10) || 30;
     var logIndex = {};
     store.listLogs().forEach(function (l) { if (l.email_message_id) logIndex[l.email_message_id] = l; });
-    var emails = source.search(buildGmailQuery(filters, windowDays))
+    var forwarders = forwardSenders(settings);
+    var emails = source.search(buildGmailQuery(filters, windowDays, forwarders))
       .filter(function (e) { return !isDone_(logIndex[e.id]); })
       .sort(function (a, b) { return a.date - b.date; }); // booking before its cancellation
 
@@ -75,6 +76,12 @@ function runProcessor(store, source, ctx) {
       if (ctx.deadline && clock() > ctx.deadline) { summary.timedOut = true; break; }
       var email = emails[i];
       var platform = detectPlatform(email.from, email.subject, filters);
+      var content = null; // the original email, when this one was forwarded from your other mailbox
+      if (!platform && forwarders.length && isFromAny(email.from, forwarders)) {
+        var inner = unwrapForwarded({ subject: email.subject, plain: email.plain(), html: email.html() });
+        platform = inner ? detectPlatform(inner.from, inner.subject, filters) : null;
+        if (platform) content = inner;
+      }
       if (!platform) continue; // e.g. marketing mail from the same sender: ignore silently
 
       var log = {
@@ -92,8 +99,9 @@ function runProcessor(store, source, ctx) {
       var parsed;
       try {
         parsed = parseEmail(platform, {
-          id: email.id, threadId: email.threadId, from: email.from, subject: email.subject,
-          date: email.date, plain: email.plain(), html: email.html()
+          id: email.id, threadId: email.threadId,
+          from: content ? content.from : email.from, subject: content ? content.subject : email.subject,
+          date: email.date, plain: content ? content.plain : email.plain(), html: content ? content.html : email.html()
         }, ctx.parserOverride);
       } catch (err) {
         log.result = 'failed';
