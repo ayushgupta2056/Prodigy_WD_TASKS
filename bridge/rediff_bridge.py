@@ -129,8 +129,9 @@ def main():
     try:
         copied, skipped = run(reader(host, os.environ['REDIFF_USER'], os.environ['REDIFF_PASSWORD'], scan), gmail, domains)
     except (poplib.error_proto, imaplib.IMAP4.error, OSError) as e:
-        print('Could not read Rediffmail over %s (%s). Check the login, or try REDIFF_PROTOCOL=%s.'
-              % (protocol.upper(), type(e).__name__, 'imap' if protocol == 'pop3' else 'pop3'))
+        print('Could not read Rediffmail over %s (%s). Check REDIFF_USER / REDIFF_PASSWORD; if they are right, '
+              'this Rediff account does not allow outside programs (free accounts may need Rediffmail Pro).'
+              % (protocol.upper(), type(e).__name__))
         return 1
     finally:
         gmail.close()
