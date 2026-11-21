@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 
 import '../core/models.dart';
@@ -70,7 +71,9 @@ class RemoteBackend implements Backend {
 
   Future<Map<String, dynamic>> _post(Map<String, dynamic> body) async {
     final req = http.Request('POST', Uri.parse(url))
-      ..followRedirects = false
+      // Apps Script answers a POST with a redirect to the result. Apps follow it
+      // themselves below; a browser must let fetch follow it (POST becomes GET).
+      ..followRedirects = kIsWeb
       ..headers['Content-Type'] = 'text/plain;charset=utf-8'
       ..body = jsonEncode({...body, 'key': apiKey});
     var res = await http.Response.fromStream(await _client.send(req).timeout(const Duration(seconds: 90)));

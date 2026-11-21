@@ -27,8 +27,9 @@ Future<void> main() async {
   if (!kIsWeb) {
     await repo.loadBundledHistory(() => rootBundle.loadString('assets/seed/history.json').then<String?>((t) => t, onError: (_) => null)).catchError((_) {});
   }
-  // The web build is a preview only: open straight into demo data.
-  if (repo.mode == Mode.unconfigured && kIsWeb) {
+  // The web build (iPhone home-screen app) starts like the other apps; add
+  // ?demo to the link to open straight into sample data for a quick look.
+  if (repo.mode == Mode.unconfigured && kIsWeb && Uri.base.queryParameters.containsKey('demo')) {
     await repo.startDemo();
   }
   // Notifications must never stop the app from starting.
