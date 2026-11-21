@@ -21,6 +21,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Rediff bridge tests
+        working-directory: bridge
+        run: python3 -m unittest -q test_rediff_bridge
       - name: Backend tests (Apps Script)
         working-directory: apps-script
         run: |
