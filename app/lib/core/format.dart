@@ -62,14 +62,14 @@ bool _isInitials(String t) => t.length <= 3 && RegExp(r'^[A-Z]+\.?$').hasMatch(t
 
 List<String> _nameParts(String name) {
   final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
-  // "Mr Pillai" -> "Pillai", but a lone "Mr" stays.
+  // "Mr Rao" -> "Rao", but a lone "Mr" stays.
   while (parts.length > 1 && _honorific.hasMatch(parts.first)) {
     parts.removeAt(0);
   }
   return parts;
 }
 
-/// "Kavya Nair" -> "Kavya N.", "Mr Suraj Khanna" -> "Suraj K.", "R V Singh" -> "R V Singh".
+/// "Kavya Nair" -> "Kavya N.", "Mr Arjun Mehta" -> "Arjun M.", "K P Sharma" -> "K P Sharma".
 String shortName(String name) {
   final parts = _nameParts(name);
   if (parts.isEmpty) return 'Guest';
@@ -78,15 +78,15 @@ String shortName(String name) {
   return '${parts.first} ${parts.last[0].toUpperCase()}.';
 }
 
-/// The one word that best identifies a guest: "Mr Suraj Khanna" -> "Suraj",
-/// "MM Khera" -> "Khera".
+/// The one word that best identifies a guest: "Mr Arjun Mehta" -> "Arjun",
+/// "MM Gill" -> "Gill".
 String firstName(String name) {
   final parts = _nameParts(name);
   if (parts.isEmpty) return 'Guest';
   return _isInitials(parts.first) ? parts.last : parts.first;
 }
 
-/// "Siva Prasad" -> "SP", "Mr Pillai" -> "P".
+/// "Gopal Das" -> "GD", "Mr Rao" -> "R".
 String initials(String name) {
   final parts = _nameParts(name);
   if (parts.isEmpty) return '?';
